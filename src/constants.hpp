@@ -31,6 +31,12 @@ namespace Constants {
     
     // Command line arguments
     const char* const ARG_DEBUG = "--debug";
+    
+    // Virtual search actions
+    const char* const SEARCH_GOOGLE_ID = "_search_google";
+    const char* const SEARCH_CHATGPT_ID = "_search_chatgpt";
+    const char* const GOOGLE_SEARCH_URL = "https://www.google.com/search?q=";
+    const char* const CHATGPT_SEARCH_URL = "https://chatgpt.com/?q=";
 }
 
 } // namespace PrimeCuts

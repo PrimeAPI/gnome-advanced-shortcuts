@@ -2,11 +2,14 @@
 
 PrimeCuts is a configurable GNOME Shell search provider that allows you to quickly execute commands, open URLs, and perform various actions directly from the GNOME Shell search interface.
 
+**Note**: This application has been tested specifically on ZorinOS. While it should work on other GNOME-based distributions, compatibility with other desktop environments is not guaranteed.
+
 ## Features
 
 - **Modular Configuration**: Organize your actions into logical groups
 - **Multiple Action Types**: Support for commands, terminal commands, URLs, and applications
 - **Flexible Search**: Search by action name, description, or custom keywords
+- **Web Search Integration**: Built-in Google and ChatGPT search options for any search terms
 - **Easy Customization**: JSON configuration file for easy editing
 - **Icon Support**: Custom icons for each action and group
 
@@ -15,17 +18,17 @@ PrimeCuts is a configurable GNOME Shell search provider that allows you to quick
 1. Build the project:
 ```bash
 meson setup build
-meson compile -C build
+ninja -C build
 ```
 
 2. Install the binary and configuration files:
 ```bash
-sudo meson install -C build
+sudo ninja -C build install
 ```
 
 3. Copy the search provider configuration:
 ```bash
-cp data/de.primeapi.PrimeCuts.search-provider.ini ~/.local/share/gnome-shell/search-providers/
+sudo cp data/de.primeapi.PrimeCuts.search-provider.ini /usr/share/gnome-shell/search-providers/
 ```
 
 4. Copy the desktop file:
@@ -196,6 +199,15 @@ PrimeCuts supports four types of actions:
 3. Select the desired action from the search results
 4. Press Enter to execute the action
 
+### Web Search Integration
+
+PrimeCuts automatically adds web search options for any search query:
+
+- **Google Search**: When you type any search terms, "Search on Google: [your terms]" will appear as an option
+- **ChatGPT Search**: Similarly, "Search on ChatGPT: [your terms]" will be available
+
+These options appear at the end of your search results, allowing you to quickly search the web for anything that doesn't match your configured actions.
+
 ## Global Settings
 
 The `global_settings` section allows you to customize PrimeCuts behavior:
@@ -208,6 +220,7 @@ The `global_settings` section allows you to customize PrimeCuts behavior:
 
 You can use any valid icon name from your system's icon theme. Common icon names include:
 
+### System Icons
 - `utilities-terminal`
 - `applications-internet`
 - `network-server`
@@ -217,6 +230,25 @@ You can use any valid icon name from your system's icon theme. Common icon names
 - `folder`
 - `document-open`
 - `system-run`
+- `web-browser`
+
+### Finding Available Icons
+
+To find available icons on your system, you can:
+
+1. **Browse system icon directories**:
+   ```bash
+   ls /usr/share/icons/*/16x16/apps/
+   ls /usr/share/icons/*/22x22/apps/
+   ```
+
+2. **Use the Freedesktop Icon Naming Specification**: Visit [specifications.freedesktop.org](https://specifications.freedesktop.org/icon-naming-spec/icon-naming-spec-latest.html) for standard icon names
+
+3. **Check your desktop environment's icon theme**: Most icons follow standard naming conventions like:
+   - `applications-*` (e.g., `applications-internet`, `applications-games`)
+   - `network-*` (e.g., `network-server`, `network-wireless`)
+   - `utilities-*` (e.g., `utilities-terminal`, `utilities-system-monitor`)
+   - `folder-*` (e.g., `folder-documents`, `folder-downloads`)
 
 ## Debugging
 
@@ -235,6 +267,7 @@ This will show detailed information about configuration loading, search requests
 3. **Test your commands**: Make sure commands work in a terminal before adding them to the configuration
 4. **Use meaningful icons**: Icons help quickly identify actions in search results
 5. **Keep descriptions concise**: They appear in search results, so make them informative but brief
+6. **Leverage web search**: Don't worry about covering every possible search - the built-in Google and ChatGPT search will handle anything else
 
 ## Troubleshooting
 

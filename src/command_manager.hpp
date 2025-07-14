@@ -27,6 +27,7 @@ public:
 private:
     Config config_;
     std::map<std::string, Action*> action_map_;
+    mutable std::vector<std::string> current_search_terms_; // Store current search terms for virtual actions
     
     void rebuildActionMap();
     bool matchesTerms(const Action& action, const std::vector<std::string>& terms) const;
@@ -35,6 +36,12 @@ private:
     bool executeCommand(const std::string& command) const;
     bool executeTerminalCommand(const std::string& command) const;
     bool executeUrl(const std::string& url) const;
+
+    // Virtual search actions
+    Action createGoogleSearchAction(const std::vector<std::string>& terms) const;
+    Action createChatGPTSearchAction(const std::vector<std::string>& terms) const;
+    std::string joinTerms(const std::vector<std::string>& terms) const;
+    std::string urlEncode(const std::string& str) const;
 };
 
 } // namespace PrimeCuts

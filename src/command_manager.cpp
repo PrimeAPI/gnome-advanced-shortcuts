@@ -5,6 +5,8 @@
 #include <iostream>
 #include <cstdlib>
 #include <sstream>
+#include <cctype>
+#include <cstdio>
 
 namespace PrimeCuts {
 
@@ -37,6 +39,9 @@ std::vector<Action> CommandManager::getAllActions() const {
 }
 
 std::vector<std::string> CommandManager::searchActions(const std::vector<std::string>& terms) const {
+    // Store search terms for virtual actions
+    current_search_terms_ = terms;
+    
     std::vector<std::string> matches;
     
     std::stringstream debug_msg;
@@ -46,6 +51,7 @@ std::vector<std::string> CommandManager::searchActions(const std::vector<std::st
     }
     LOG_DEBUG(debug_msg.str());
     
+    // Search regular actions
     for (const auto& group : config_.groups) {
         for (const auto& action : group.actions) {
             if (matchesTerms(action, terms)) {
@@ -53,6 +59,13 @@ std::vector<std::string> CommandManager::searchActions(const std::vector<std::st
                 LOG_DEBUG("Action matched: " + action.name + " (ID: " + action.id + ")");
             }
         }
+    }
+    
+    // Add virtual search actions if there are search terms
+    if (!terms.empty()) {
+        matches.push_back(Constants::SEARCH_GOOGLE_ID);
+        matches.push_back(Constants::SEARCH_CHATGPT_ID);
+        LOG_DEBUG("Added virtual search actions for: " + joinTerms(terms));
     }
     
     LOG_DEBUG("Total matches found: " + std::to_string(matches.size()));
@@ -125,16 +138,57 @@ bool CommandManager::matchesSingleTerm(const Action& action, const std::string& 
 }
 
 Action* CommandManager::getAction(const std::string& id) {
+    // Handle virtual search actions - we need to return them as mutable for the main.cpp getAction calls
+    // We'll use static storage to provide mutable access
+    if (id == Constants::SEARCH_GOOGLE_ID) {
+        static Action google_action;
+        google_action = createGoogleSearchAction(current_search_terms_);
+        return &google_action;
+    }
+    if (id == Constants::SEARCH_CHATGPT_ID) {
+        static Action chatgpt_action;
+        chatgpt_action = createChatGPTSearchAction(current_search_terms_);
+        return &chatgpt_action;
+    }
+    
     auto it = action_map_.find(id);
     return (it != action_map_.end()) ? it->second : nullptr;
 }
 
 const Action* CommandManager::getAction(const std::string& id) const {
+    // Handle virtual search actions
+    if (id == Constants::SEARCH_GOOGLE_ID) {
+        static Action google_action = createGoogleSearchAction(current_search_terms_);
+        google_action = createGoogleSearchAction(current_search_terms_); // Refresh with current terms
+        return &google_action;
+    }
+    if (id == Constants::SEARCH_CHATGPT_ID) {
+        static Action chatgpt_action = createChatGPTSearchAction(current_search_terms_);
+        chatgpt_action = createChatGPTSearchAction(current_search_terms_); // Refresh with current terms
+        return &chatgpt_action;
+    }
+    
+    // Handle regular actions
     auto it = action_map_.find(id);
     return (it != action_map_.end()) ? it->second : nullptr;
 }
 
 bool CommandManager::executeAction(const std::string& id, const std::vector<std::string>& terms) {
+    // Handle virtual search actions
+    if (id == Constants::SEARCH_GOOGLE_ID) {
+        std::string search_query = joinTerms(!terms.empty() ? terms : current_search_terms_);
+        std::string encoded_query = urlEncode(search_query);
+        std::string url = Constants::GOOGLE_SEARCH_URL + encoded_query;
+        return executeUrl(url);
+    }
+    if (id == Constants::SEARCH_CHATGPT_ID) {
+        std::string search_query = joinTerms(!terms.empty() ? terms : current_search_terms_);
+        std::string encoded_query = urlEncode(search_query);
+        std::string url = Constants::CHATGPT_SEARCH_URL + encoded_query;
+        return executeUrl(url);
+    }
+    
+    // Handle regular actions
     Action* action = getAction(id);
     if (!action) {
         LOG_ERROR("Action not found: " + id);
@@ -199,6 +253,57 @@ bool CommandManager::executeUrl(const std::string& url) const {
         LOG_WARNING("URL opening returned non-zero exit code: " + std::to_string(result));
     }
     return result == 0;
+}
+
+Action CommandManager::createGoogleSearchAction(const std::vector<std::string>& terms) const {
+    std::string search_query = joinTerms(terms);
+    return Action(
+        Constants::SEARCH_GOOGLE_ID,
+        "Google",
+        "Ask Google for your query",
+        "web-browser",
+        ActionType::URL,
+        Constants::GOOGLE_SEARCH_URL + urlEncode(search_query)
+    );
+}
+
+Action CommandManager::createChatGPTSearchAction(const std::vector<std::string>& terms) const {
+    std::string search_query = joinTerms(terms);
+    return Action(
+        Constants::SEARCH_CHATGPT_ID,
+        "ChatGPT",
+        "Ask ChatGPT for your query",
+        "web-browser",
+        ActionType::URL,
+        Constants::CHATGPT_SEARCH_URL + urlEncode(search_query)
+    );
+}
+
+std::string CommandManager::joinTerms(const std::vector<std::string>& terms) const {
+    if (terms.empty()) return "";
+    
+    std::string result = terms[0];
+    for (size_t i = 1; i < terms.size(); ++i) {
+        result += " " + terms[i];
+    }
+    return result;
+}
+
+std::string CommandManager::urlEncode(const std::string& str) const {
+    std::string encoded;
+    for (char c : str) {
+        if (std::isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+            encoded += c;
+        } else if (c == ' ') {
+            encoded += '+';
+        } else {
+            encoded += '%';
+            char hex[3];
+            snprintf(hex, sizeof(hex), "%02X", static_cast<unsigned char>(c));
+            encoded += hex;
+        }
+    }
+    return encoded;
 }
 
 } // namespace PrimeCuts
