@@ -1,0 +1,3 @@
+[D-BUS Service]
+Name=de.primeapi.PrimeCuts
+Exec=/full/path/to/primecuts

@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=PrimeCuts
+Comment=Smart terminal shortcut launcher
+Exec=primecuts
+Icon=utilities-terminal
+Terminal=false
+Type=Application
+Categories=Utility;
+Keywords=prime,shortcuts,ssh,terminal
+NoDisplay=false
+DBusActivatable=true
+X-GNOME-SearchProvider-Path=de/primeapi/PrimeCuts
