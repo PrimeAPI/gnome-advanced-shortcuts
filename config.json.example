@@ -1,0 +1,163 @@
+{
+  "groups": [
+    {
+      "name": "SSH Connections",
+      "description": "Quick SSH connections to servers",
+      "icon": "network-server",
+      "actions": [
+        {
+          "id": "ssh_prod",
+          "name": "Production Server",
+          "description": "SSH to production server",
+          "icon": "network-server",
+          "type": "terminal_command",
+          "command": "ssh user@prod.example.com",
+          "keywords": ["ssh", "prod", "production"]
+        },
+        {
+          "id": "ssh_dev",
+          "name": "Development Server", 
+          "description": "SSH to development server",
+          "icon": "network-server",
+          "type": "terminal_command",
+          "command": "ssh user@dev.example.com",
+          "keywords": ["ssh", "dev", "development"]
+        },
+        {
+          "id": "ssh_staging",
+          "name": "Staging Server",
+          "description": "SSH to staging server", 
+          "icon": "network-server",
+          "type": "terminal_command",
+          "command": "ssh user@staging.example.com",
+          "keywords": ["ssh", "staging", "stage"]
+        }
+      ]
+    },
+    {
+      "name": "Services",
+      "description": "Start, stop, and restart system services",
+      "icon": "applications-system",
+      "actions": [
+        {
+          "id": "restart_apache",
+          "name": "Restart Apache",
+          "description": "Restart Apache web server",
+          "icon": "applications-internet",
+          "type": "terminal_command",
+          "command": "sudo systemctl restart apache2",
+          "keywords": ["apache", "restart", "web"]
+        },
+        {
+          "id": "restart_nginx",
+          "name": "Restart Nginx",
+          "description": "Restart Nginx web server",
+          "icon": "applications-internet", 
+          "type": "terminal_command",
+          "command": "sudo systemctl restart nginx",
+          "keywords": ["nginx", "restart", "web"]
+        },
+        {
+          "id": "restart_mysql",
+          "name": "Restart MySQL",
+          "description": "Restart MySQL database server",
+          "icon": "applications-databases",
+          "type": "terminal_command", 
+          "command": "sudo systemctl restart mysql",
+          "keywords": ["mysql", "restart", "database", "db"]
+        },
+        {
+          "id": "docker_status",
+          "name": "Docker Status",
+          "description": "Check Docker service status",
+          "icon": "applications-system",
+          "type": "terminal_command",
+          "command": "sudo systemctl status docker",
+          "keywords": ["docker", "status", "container"]
+        }
+      ]
+    },
+    {
+      "name": "Development",
+      "description": "Development tools and shortcuts",
+      "icon": "applications-development",
+      "actions": [
+        {
+          "id": "code_project",
+          "name": "Open VS Code",
+          "description": "Open current project in VS Code",
+          "icon": "code",
+          "type": "command",
+          "command": "code .",
+          "keywords": ["code", "vscode", "editor"]
+        },
+        {
+          "id": "git_status",
+          "name": "Git Status",
+          "description": "Show git repository status",
+          "icon": "git",
+          "type": "terminal_command",
+          "command": "git status",
+          "keywords": ["git", "status", "repo"]
+        },
+        {
+          "id": "npm_install",
+          "name": "NPM Install",
+          "description": "Run npm install in current directory",
+          "icon": "package-manager",
+          "type": "terminal_command",
+          "command": "npm install",
+          "keywords": ["npm", "install", "node"]
+        }
+      ]
+    },
+    {
+      "name": "Websites",
+      "description": "Quick access to frequently used websites",
+      "icon": "applications-internet", 
+      "actions": [
+        {
+          "id": "github",
+          "name": "GitHub",
+          "description": "Open GitHub in browser",
+          "icon": "github",
+          "type": "url",
+          "command": "https://github.com",
+          "keywords": ["github", "git", "repo"]
+        },
+        {
+          "id": "stackoverflow",
+          "name": "Stack Overflow",
+          "description": "Open Stack Overflow",
+          "icon": "stackoverflow", 
+          "type": "url",
+          "command": "https://stackoverflow.com",
+          "keywords": ["stack", "overflow", "help", "code"]
+        },
+        {
+          "id": "localhost",
+          "name": "Localhost",
+          "description": "Open localhost:3000",
+          "icon": "applications-internet",
+          "type": "url", 
+          "command": "http://localhost:3000",
+          "keywords": ["localhost", "local", "dev"]
+        },
+        {
+          "id": "docs",
+          "name": "Documentation",
+          "description": "Open project documentation",
+          "icon": "help-contents",
+          "type": "url",
+          "command": "https://docs.example.com",
+          "keywords": ["docs", "documentation", "help"]
+        }
+      ]
+    }
+  ],
+  "global_settings": {
+    "terminal_command": "gnome-terminal",
+    "browser_command": "xdg-open",
+    "enable_notifications": "true"
+  }
+}

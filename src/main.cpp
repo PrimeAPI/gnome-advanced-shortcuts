@@ -3,8 +3,15 @@
 #include <map>
 #include <vector>
 #include <string>
+#include <memory>
+
+#include "config.hpp"
+#include "config_loader.hpp"
+#include "command_manager.hpp"
 
 static bool debug_mode = false;
+static std::unique_ptr<PrimeCuts::CommandManager> command_manager;
+static PrimeCuts::Config app_config;
 
 #define DEBUG_LOG(x) do { if (debug_mode) { std::cout << x << std::endl; } } while(0)
 
@@ -32,11 +39,32 @@ const char* introspection_xml =
     "  </interface>"
     "</node>";
 
-std::map<std::string, std::string> bookmarks = {
-    {"ssh1", "SSH to Server 1"},
-    {"ssh2", "SSH to Dev Server"},
-    {"ssh3", "SSH to Admin Box"}
-};
+bool initializeConfiguration() {
+    PrimeCuts::ConfigLoader loader;
+    
+    // Try to load configuration, create default if not found
+    if (!loader.loadConfig("", app_config)) {
+        std::cerr << "Failed to load configuration" << std::endl;
+        return false;
+    }
+    
+    // Initialize command manager with the loaded config
+    command_manager = std::make_unique<PrimeCuts::CommandManager>(app_config);
+    
+    DEBUG_LOG("Configuration loaded successfully with " << app_config.groups.size() << " groups");
+    
+    // Print loaded actions for debugging
+    if (debug_mode) {
+        for (const auto& group : app_config.groups) {
+            DEBUG_LOG("Group: " << group.name << " (" << group.actions.size() << " actions)");
+            for (const auto& action : group.actions) {
+                DEBUG_LOG("  - " << action.name << " [" << action.id << "]");
+            }
+        }
+    }
+    
+    return true;
+}
 
 static void handle_method_call(
     GDBusConnection* connection,
@@ -51,36 +79,46 @@ static void handle_method_call(
     DEBUG_LOG("DBus method called: " << method_name << " from " << sender);
     
     if (g_strcmp0(method_name, "GetInitialResultSet") == 0) {
-        DEBUG_LOG("Processing GetInitialResultSet request...");
+        DEBUG_LOG("Processing GetInitialResultSet request... [" << time(nullptr) << "]");
+        DEBUG_LOG("Parameters type: " << g_variant_get_type_string(parameters));
+        
         GVariantIter iter;
         gchar* term;
-        std::vector<std::string> matches;
+        std::vector<std::string> search_terms;
 
         g_variant_iter_init(&iter, parameters);
         GVariant* terms_array = g_variant_iter_next_value(&iter);
         
+        DEBUG_LOG("Terms array is " << (terms_array ? "not null" : "null"));
+        
         if (terms_array) {
+            DEBUG_LOG("Terms array type: " << g_variant_get_type_string(terms_array));
+            DEBUG_LOG("Terms array size: " << g_variant_n_children(terms_array));
+            
             GVariantIter terms_iter;
             g_variant_iter_init(&terms_iter, terms_array);
             
             while (g_variant_iter_next(&terms_iter, "s", &term)) {
                 std::string termStr(term);
-                DEBUG_LOG("Search term: '" << termStr << "'");
-                for (const auto& [key, label] : bookmarks) {
-                    if (label.find(termStr) != std::string::npos || key.find(termStr) != std::string::npos) {
-                        matches.push_back(key);
-                        DEBUG_LOG("Found match: " << key << " -> " << label);
-                    }
-                }
+                DEBUG_LOG("Search term: '" << termStr << "' (length: " << termStr.length() << ")");
+                search_terms.push_back(termStr);
                 g_free(term);
             }
             g_variant_unref(terms_array);
         }
+        
+        DEBUG_LOG("Total search terms extracted: " << search_terms.size());
+
+        // Use command manager to search for matching actions
+        std::vector<std::string> matches = command_manager->searchActions(search_terms);
+        
+        DEBUG_LOG("Search completed. Found " << matches.size() << " matching actions out of " << app_config.groups.size() << " total groups");
 
         GVariantBuilder builder;
         g_variant_builder_init(&builder, G_VARIANT_TYPE("as"));
         for (const auto& id : matches) {
             g_variant_builder_add(&builder, "s", id.c_str());
+            DEBUG_LOG("Found match: " << id);
         }
 
         DEBUG_LOG("Returning " << matches.size() << " results");
@@ -88,36 +126,56 @@ static void handle_method_call(
     }
 
     else if (g_strcmp0(method_name, "GetSubsearchResultSet") == 0) {
-        DEBUG_LOG("Processing GetSubsearchResultSet request...");
-        GVariant* previous_results_variant;
-        GVariant* terms_variant;
-        GVariantIter terms_iter;
-        gchar* term;
-        std::vector<std::string> matches;
-
-        g_variant_get(parameters, "(asas)", &previous_results_variant, &terms_variant);
-        g_variant_iter_init(&terms_iter, terms_variant);
+        DEBUG_LOG("Processing GetSubsearchResultSet request... [" << time(nullptr) << "]");
+        DEBUG_LOG("Parameters type: " << g_variant_get_type_string(parameters));
         
-        // For subsearch, we can just filter the previous results or do a fresh search
-        // In this simple case, we'll do a fresh search similar to GetInitialResultSet
-        while (g_variant_iter_next(&terms_iter, "s", &term)) {
-            std::string termStr(term);
-            DEBUG_LOG("Subsearch term: '" << termStr << "'");
-            for (const auto& [key, label] : bookmarks) {
-                if (label.find(termStr) != std::string::npos || key.find(termStr) != std::string::npos) {
-                    matches.push_back(key);
-                    DEBUG_LOG("Found subsearch match: " << key << " -> " << label);
-                }
-            }
-            g_free(term);
+        gchar* term;
+        std::vector<std::string> search_terms;
+
+        // Use a safer approach to extract the parameters
+        GVariantIter outer_iter;
+        g_variant_iter_init(&outer_iter, parameters);
+        
+        // Skip the previous results array (first parameter)
+        GVariant* previous_results = g_variant_iter_next_value(&outer_iter);
+        if (previous_results) {
+            DEBUG_LOG("Previous results count: " << g_variant_n_children(previous_results));
+            g_variant_unref(previous_results);
         }
-        g_variant_unref(previous_results_variant);
-        g_variant_unref(terms_variant);
+        
+        // Get the terms array (second parameter)
+        GVariant* terms_array = g_variant_iter_next_value(&outer_iter);
+        
+        DEBUG_LOG("Terms array is " << (terms_array ? "not null" : "null"));
+        
+        if (terms_array) {
+            DEBUG_LOG("Terms array type: " << g_variant_get_type_string(terms_array));
+            DEBUG_LOG("Terms array size: " << g_variant_n_children(terms_array));
+            
+            GVariantIter terms_iter;
+            g_variant_iter_init(&terms_iter, terms_array);
+            
+            while (g_variant_iter_next(&terms_iter, "s", &term)) {
+                std::string termStr(term);
+                DEBUG_LOG("Subsearch term: '" << termStr << "' (length: " << termStr.length() << ")");
+                search_terms.push_back(termStr);
+                g_free(term);
+            }
+            g_variant_unref(terms_array);
+        }
+        
+        DEBUG_LOG("Total subsearch terms extracted: " << search_terms.size());
+
+        // Use command manager to search for matching actions
+        std::vector<std::string> matches = command_manager->searchActions(search_terms);
+        
+        DEBUG_LOG("Subsearch completed. Found " << matches.size() << " matching actions");
 
         GVariantBuilder builder;
         g_variant_builder_init(&builder, G_VARIANT_TYPE("as"));
         for (const auto& id : matches) {
             g_variant_builder_add(&builder, "s", id.c_str());
+            DEBUG_LOG("Found subsearch match: " << id);
         }
 
         DEBUG_LOG("Returning " << matches.size() << " subsearch results");
@@ -141,16 +199,18 @@ static void handle_method_call(
             
             while (g_variant_iter_next(&ids_iter, "s", &id)) {
                 DEBUG_LOG("Getting meta for ID: " << id);
-                auto it = bookmarks.find(id);
-                if (it != bookmarks.end()) {
+                PrimeCuts::Action* action = command_manager->getAction(id);
+                if (action) {
                     GVariantBuilder meta;
                     g_variant_builder_init(&meta, G_VARIANT_TYPE("a{sv}"));
                     g_variant_builder_add(&meta, "{sv}", "id", g_variant_new_string(id));
-                    g_variant_builder_add(&meta, "{sv}", "name", g_variant_new_string(it->second.c_str()));
-                    g_variant_builder_add(&meta, "{sv}", "description", g_variant_new_string("PrimeCuts Shortcut"));
-                    g_variant_builder_add(&meta, "{sv}", "icon", g_variant_new_string("utilities-terminal"));
+                    g_variant_builder_add(&meta, "{sv}", "name", g_variant_new_string(action->name.c_str()));
+                    g_variant_builder_add(&meta, "{sv}", "description", g_variant_new_string(action->description.c_str()));
+                    g_variant_builder_add(&meta, "{sv}", "icon", g_variant_new_string(action->icon.c_str()));
 
                     g_variant_builder_add(&outer, "a{sv}", &meta);
+                } else {
+                    DEBUG_LOG("No action found for ID: " << id);
                 }
                 g_free(id);
             }
@@ -163,18 +223,29 @@ static void handle_method_call(
     else if (g_strcmp0(method_name, "ActivateResult") == 0) {
         DEBUG_LOG("Processing ActivateResult request...");
         const gchar* id;
-        GVariantIter* terms;
+        GVariant* terms_variant;
         guint32 timestamp;
-        g_variant_get(parameters, "(&s@asu)", &id, &terms, &timestamp);
+        g_variant_get(parameters, "(&s@asu)", &id, &terms_variant, &timestamp);
 
         DEBUG_LOG("Activating result with ID: " << id);
-        auto it = bookmarks.find(id);
-        if (it != bookmarks.end()) {
-            std::string cmd = "gnome-terminal -- bash -c 'echo " + it->second + "; exec bash'";
-            DEBUG_LOG("Executing command: " << cmd);
-            system(cmd.c_str());
-        } else {
-            DEBUG_LOG("No bookmark found for ID: " << id);
+        
+        // Extract terms for potential use in command execution
+        std::vector<std::string> terms;
+        if (terms_variant) {
+            GVariantIter terms_iter;
+            g_variant_iter_init(&terms_iter, terms_variant);
+            gchar* term;
+            while (g_variant_iter_next(&terms_iter, "s", &term)) {
+                terms.push_back(std::string(term));
+                g_free(term);
+            }
+            g_variant_unref(terms_variant);
+        }
+        
+        // Use command manager to execute the action
+        bool success = command_manager->executeAction(id, terms);
+        if (!success) {
+            DEBUG_LOG("Failed to execute action with ID: " << id);
         }
 
         g_dbus_method_invocation_return_value(invocation, nullptr);
@@ -231,6 +302,12 @@ int main(int argc, char* argv[]) {
     
     DEBUG_LOG("Starting PrimeCuts DBus service...");
     
+    // Initialize configuration before starting DBus service
+    if (!initializeConfiguration()) {
+        std::cerr << "Failed to initialize configuration. Exiting." << std::endl;
+        return 1;
+    }
+    
     GMainLoop* loop = g_main_loop_new(NULL, FALSE);
     introspection_data = g_dbus_node_info_new_for_xml(introspection_xml, NULL);
     
@@ -252,6 +329,7 @@ int main(int argc, char* argv[]) {
 
     if (debug_mode) {
         std::cout << "PrimeCuts DBus service running in debug mode..." << std::endl;
+        std::cout << "Configuration loaded with " << app_config.groups.size() << " action groups." << std::endl;
     } else {
         std::cout << "PrimeCuts DBus service running..." << std::endl;
     }

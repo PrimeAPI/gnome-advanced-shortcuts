@@ -5,7 +5,9 @@ glib_dep = dependency('glib-2.0')
 gio_dep = dependency('gio-2.0')
 
 executable('primecuts',
-  'src/main.cpp',
+  ['src/main.cpp',
+   'src/config_loader.cpp',
+   'src/command_manager.cpp'],
   dependencies: [glib_dep, gio_dep],
   install: true,
   install_dir: get_option('bindir'))
