@@ -3,16 +3,22 @@
 #include "config.hpp"
 #include <vector>
 #include <string>
+#include <map>
 
 namespace PrimeCuts {
 
 class CommandManager {
 public:
-    CommandManager(const Config& config);
+    explicit CommandManager(const Config& config);
     ~CommandManager() = default;
     
-    std::vector<std::string> searchActions(const std::vector<std::string>& terms);
+    // Delete copy constructor and assignment operator
+    CommandManager(const CommandManager&) = delete;
+    CommandManager& operator=(const CommandManager&) = delete;
+    
+    std::vector<std::string> searchActions(const std::vector<std::string>& terms) const;
     Action* getAction(const std::string& id);
+    const Action* getAction(const std::string& id) const;
     bool executeAction(const std::string& id, const std::vector<std::string>& terms = {});
     
     void updateConfig(const Config& config);
@@ -23,11 +29,12 @@ private:
     std::map<std::string, Action*> action_map_;
     
     void rebuildActionMap();
-    bool matchesTerms(const Action& action, const std::vector<std::string>& terms);
-    std::string buildTerminalCommand(const std::string& command);
-    bool executeCommand(const std::string& command);
-    bool executeTerminalCommand(const std::string& command);
-    bool executeUrl(const std::string& url);
+    bool matchesTerms(const Action& action, const std::vector<std::string>& terms) const;
+    bool matchesSingleTerm(const Action& action, const std::string& lower_term) const;
+    std::string buildTerminalCommand(const std::string& command) const;
+    bool executeCommand(const std::string& command) const;
+    bool executeTerminalCommand(const std::string& command) const;
+    bool executeUrl(const std::string& url) const;
 };
 
 } // namespace PrimeCuts

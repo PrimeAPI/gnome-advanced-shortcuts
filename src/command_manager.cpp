@@ -1,7 +1,10 @@
 #include "command_manager.hpp"
+#include "logger.hpp"
+#include "constants.hpp"
 #include <algorithm>
 #include <iostream>
 #include <cstdlib>
+#include <sstream>
 
 namespace PrimeCuts {
 
@@ -33,85 +36,91 @@ std::vector<Action> CommandManager::getAllActions() const {
     return actions;
 }
 
-std::vector<std::string> CommandManager::searchActions(const std::vector<std::string>& terms) {
+std::vector<std::string> CommandManager::searchActions(const std::vector<std::string>& terms) const {
     std::vector<std::string> matches;
     
-    // Debug: print search terms
-    std::cout << "DEBUG: Searching with '" << terms.size() << "' terms: ";
+    std::stringstream debug_msg;
+    debug_msg << "Searching with " << terms.size() << " terms: ";
     for (const auto& term : terms) {
-        std::cout << "'" << term << "' ";
+        debug_msg << "'" << term << "' ";
     }
-    std::cout << std::endl;
+    LOG_DEBUG(debug_msg.str());
     
     for (const auto& group : config_.groups) {
         for (const auto& action : group.actions) {
             if (matchesTerms(action, terms)) {
                 matches.push_back(action.id);
-                std::cout << "DEBUG: Action matched: " << action.name << " (ID: " << action.id << ")" << std::endl;
+                LOG_DEBUG("Action matched: " + action.name + " (ID: " + action.id + ")");
             }
         }
     }
     
-    std::cout << "DEBUG: Total matches found: " << matches.size() << std::endl;
+    LOG_DEBUG("Total matches found: " + std::to_string(matches.size()));
     return matches;
 }
 
-bool CommandManager::matchesTerms(const Action& action, const std::vector<std::string>& terms) {
-    // If no search terms provided, don't return any results
-    if (terms.empty()) return false;
+bool CommandManager::matchesTerms(const Action& action, const std::vector<std::string>& terms) const {
+    if (terms.empty()) {
+        return false;
+    }
     
     // Convert search terms to lowercase for case-insensitive matching
     std::vector<std::string> lower_terms;
     for (const auto& term : terms) {
         std::string lower_term = term;
         std::transform(lower_term.begin(), lower_term.end(), lower_term.begin(), ::tolower);
-        // Skip empty terms
         if (!lower_term.empty()) {
             lower_terms.push_back(lower_term);
         }
     }
     
-    // If all terms were empty, don't match
-    if (lower_terms.empty()) return false;
+    if (lower_terms.empty()) {
+        return false;
+    }
     
-    // At least one term must match for the action to be considered a match
+    // Check if any term matches
     for (const auto& term : lower_terms) {
-        // Check keywords
-        for (const auto& keyword : action.keywords) {
-            std::string lower_keyword = keyword;
-            std::transform(lower_keyword.begin(), lower_keyword.end(), lower_keyword.begin(), ::tolower);
-            if (lower_keyword.find(term) != std::string::npos) {
-                std::cout << "DEBUG: MATCH - Action '" << action.name << "' keyword '" << keyword << "' contains '" << term << "'" << std::endl;
-                return true; // Found a match, return immediately
-            }
-        }
-        
-        // Check name
-        std::string lower_name = action.name;
-        std::transform(lower_name.begin(), lower_name.end(), lower_name.begin(), ::tolower);
-        if (lower_name.find(term) != std::string::npos) {
-            std::cout << "DEBUG: MATCH - Action '" << action.name << "' name contains '" << term << "'" << std::endl;
-            return true; // Found a match, return immediately
-        }
-        
-        // Check description
-        std::string lower_desc = action.description;
-        std::transform(lower_desc.begin(), lower_desc.end(), lower_desc.begin(), ::tolower);
-        if (lower_desc.find(term) != std::string::npos) {
-            std::cout << "DEBUG: MATCH - Action '" << action.name << "' description contains '" << term << "'" << std::endl;
-            return true; // Found a match, return immediately
-        }
-        
-        // Check ID
-        std::string lower_id = action.id;
-        std::transform(lower_id.begin(), lower_id.end(), lower_id.begin(), ::tolower);
-        if (lower_id.find(term) != std::string::npos) {
-            std::cout << "DEBUG: MATCH - Action '" << action.name << "' ID contains '" << term << "'" << std::endl;
-            return true; // Found a match, return immediately
+        if (matchesSingleTerm(action, term)) {
+            return true;
         }
     }
     
-    // No terms matched
+    return false;
+}
+
+bool CommandManager::matchesSingleTerm(const Action& action, const std::string& lower_term) const {
+    auto toLower = [](const std::string& str) {
+        std::string result = str;
+        std::transform(result.begin(), result.end(), result.begin(), ::tolower);
+        return result;
+    };
+    
+    // Check keywords
+    for (const auto& keyword : action.keywords) {
+        if (toLower(keyword).find(lower_term) != std::string::npos) {
+            LOG_DEBUG("MATCH - Action '" + action.name + "' keyword '" + keyword + "' contains '" + lower_term + "'");
+            return true;
+        }
+    }
+    
+    // Check name
+    if (toLower(action.name).find(lower_term) != std::string::npos) {
+        LOG_DEBUG("MATCH - Action '" + action.name + "' name contains '" + lower_term + "'");
+        return true;
+    }
+    
+    // Check description
+    if (toLower(action.description).find(lower_term) != std::string::npos) {
+        LOG_DEBUG("MATCH - Action '" + action.name + "' description contains '" + lower_term + "'");
+        return true;
+    }
+    
+    // Check ID
+    if (toLower(action.id).find(lower_term) != std::string::npos) {
+        LOG_DEBUG("MATCH - Action '" + action.name + "' ID contains '" + lower_term + "'");
+        return true;
+    }
+    
     return false;
 }
 
@@ -120,14 +129,19 @@ Action* CommandManager::getAction(const std::string& id) {
     return (it != action_map_.end()) ? it->second : nullptr;
 }
 
+const Action* CommandManager::getAction(const std::string& id) const {
+    auto it = action_map_.find(id);
+    return (it != action_map_.end()) ? it->second : nullptr;
+}
+
 bool CommandManager::executeAction(const std::string& id, const std::vector<std::string>& terms) {
     Action* action = getAction(id);
     if (!action) {
-        std::cerr << "Action not found: " << id << std::endl;
+        LOG_ERROR("Action not found: " + id);
         return false;
     }
     
-    std::cout << "Executing action: " << action->name << " (" << action->id << ")" << std::endl;
+    LOG_INFO("Executing action: " + action->name + " (" + action->id + ")");
     
     switch (action->type) {
         case ActionType::COMMAND:
@@ -139,40 +153,51 @@ bool CommandManager::executeAction(const std::string& id, const std::vector<std:
         case ActionType::APPLICATION:
             return executeCommand(action->command);
         default:
-            std::cerr << "Unknown action type for: " << id << std::endl;
+            LOG_ERROR("Unknown action type for: " + id);
             return false;
     }
 }
 
-std::string CommandManager::buildTerminalCommand(const std::string& command) {
-    std::string terminal_cmd = config_.global_settings.count("terminal_command") 
-        ? config_.global_settings.at("terminal_command") 
-        : "gnome-terminal";
+std::string CommandManager::buildTerminalCommand(const std::string& command) const {
+    auto it = config_.global_settings.find(Constants::SETTING_TERMINAL_COMMAND);
+    std::string terminal_cmd = (it != config_.global_settings.end()) 
+        ? it->second 
+        : Constants::DEFAULT_TERMINAL_COMMAND;
     
     return terminal_cmd + " -- bash -c '" + command + "; echo \"Press Enter to close...\"; read'";
 }
 
-bool CommandManager::executeCommand(const std::string& command) {
-    std::cout << "Executing command: " << command << std::endl;
+bool CommandManager::executeCommand(const std::string& command) const {
+    LOG_INFO("Executing command: " + command);
     int result = system(command.c_str());
+    if (result != 0) {
+        LOG_WARNING("Command execution returned non-zero exit code: " + std::to_string(result));
+    }
     return result == 0;
 }
 
-bool CommandManager::executeTerminalCommand(const std::string& command) {
+bool CommandManager::executeTerminalCommand(const std::string& command) const {
     std::string full_command = buildTerminalCommand(command);
-    std::cout << "Executing terminal command: " << full_command << std::endl;
+    LOG_INFO("Executing terminal command: " + command);
     int result = system(full_command.c_str());
+    if (result != 0) {
+        LOG_WARNING("Terminal command execution returned non-zero exit code: " + std::to_string(result));
+    }
     return result == 0;
 }
 
-bool CommandManager::executeUrl(const std::string& url) {
-    std::string browser_cmd = config_.global_settings.count("browser_command") 
-        ? config_.global_settings.at("browser_command") 
-        : "xdg-open";
+bool CommandManager::executeUrl(const std::string& url) const {
+    auto it = config_.global_settings.find(Constants::SETTING_BROWSER_COMMAND);
+    std::string browser_cmd = (it != config_.global_settings.end()) 
+        ? it->second 
+        : Constants::DEFAULT_BROWSER_COMMAND;
     
     std::string full_command = browser_cmd + " '" + url + "'";
-    std::cout << "Opening URL: " << url << std::endl;
+    LOG_INFO("Opening URL: " + url);
     int result = system(full_command.c_str());
+    if (result != 0) {
+        LOG_WARNING("URL opening returned non-zero exit code: " + std::to_string(result));
+    }
     return result == 0;
 }
 

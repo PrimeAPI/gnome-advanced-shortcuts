@@ -1,8 +1,12 @@
 #include "config_loader.hpp"
+#include "logger.hpp"
+#include "constants.hpp"
 #include <fstream>
 #include <sstream>
 #include <iostream>
 #include <algorithm>
+#include <unistd.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <sys/stat.h>
 
@@ -11,9 +15,9 @@ namespace PrimeCuts {
 std::string ConfigLoader::getDefaultConfigPath() {
     const char* home = getenv("HOME");
     if (home) {
-        return std::string(home) + "/.config/primecuts/config.json";
+        return std::string(home) + Constants::DEFAULT_CONFIG_SUBDIR + Constants::DEFAULT_CONFIG_FILENAME;
     }
-    return "./config.json";
+    return std::string("./") + Constants::DEFAULT_CONFIG_FILENAME;
 }
 
 void ConfigLoader::createDefaultConfig(Config& config) {
@@ -70,9 +74,9 @@ void ConfigLoader::createDefaultConfig(Config& config) {
     config.groups = {sshGroup, servicesGroup, devGroup, websitesGroup};
     
     // Global settings
-    config.global_settings["terminal_command"] = "gnome-terminal";
-    config.global_settings["browser_command"] = "xdg-open";
-    config.global_settings["enable_notifications"] = "true";
+    config.global_settings[Constants::SETTING_TERMINAL_COMMAND] = Constants::DEFAULT_TERMINAL_COMMAND;
+    config.global_settings[Constants::SETTING_BROWSER_COMMAND] = Constants::DEFAULT_BROWSER_COMMAND;
+    config.global_settings[Constants::SETTING_ENABLE_NOTIFICATIONS] = "true";
 }
 
 bool ConfigLoader::loadConfig(const std::string& config_path, Config& config) {
@@ -80,8 +84,8 @@ bool ConfigLoader::loadConfig(const std::string& config_path, Config& config) {
     
     std::ifstream file(path);
     if (!file.is_open()) {
-        std::cerr << "Config file not found at: " << path << std::endl;
-        std::cerr << "Creating default configuration..." << std::endl;
+        LOG_WARNING("Config file not found at: " + path);
+        LOG_INFO("Creating default configuration...");
         createDefaultConfig(config);
         return saveConfig(path, config);
     }
@@ -106,7 +110,7 @@ bool ConfigLoader::saveConfig(const std::string& config_path, const Config& conf
     
     std::ofstream file(path);
     if (!file.is_open()) {
-        std::cerr << "Failed to create config file at: " << path << std::endl;
+        LOG_ERROR("Failed to create config file at: " + path);
         return false;
     }
     
@@ -114,7 +118,7 @@ bool ConfigLoader::saveConfig(const std::string& config_path, const Config& conf
     file << json_content;
     file.close();
     
-    std::cout << "Configuration saved to: " << path << std::endl;
+    LOG_INFO("Configuration saved to: " + path);
     return true;
 }
 
@@ -132,14 +136,14 @@ bool ConfigLoader::loadFromJson(const std::string& content, Config& config) {
         // Skip to groups array
         size_t groups_start = content.find("\"groups\"");
         if (groups_start == std::string::npos) {
-            std::cerr << "No 'groups' section found in config" << std::endl;
+            LOG_WARNING("No 'groups' section found in config, using default configuration");
             createDefaultConfig(config);
             return true;
         }
         
         size_t array_start = content.find("[", groups_start);
         if (array_start == std::string::npos) {
-            std::cerr << "Invalid groups array format" << std::endl;
+            LOG_WARNING("Invalid groups array format, using default configuration");
             createDefaultConfig(config);
             return true;
         }
@@ -178,12 +182,12 @@ bool ConfigLoader::loadFromJson(const std::string& content, Config& config) {
         // Parse global settings
         parseGlobalSettings(content, config);
         
-        std::cout << "Loaded configuration with " << config.groups.size() << " groups" << std::endl;
+        LOG_INFO("Loaded configuration with " + std::to_string(config.groups.size()) + " groups");
         return true;
         
     } catch (const std::exception& e) {
-        std::cerr << "Error parsing JSON: " << e.what() << std::endl;
-        std::cerr << "Loading default configuration instead..." << std::endl;
+        LOG_ERROR("Error parsing JSON: " + std::string(e.what()));
+        LOG_INFO("Loading default configuration instead...");
         createDefaultConfig(config);
         return true;
     }
@@ -422,9 +426,9 @@ void ConfigLoader::parseGlobalSettings(const std::string& content, Config& confi
     size_t settings_start = content.find("\"global_settings\"");
     if (settings_start == std::string::npos) {
         // Set default global settings
-        config.global_settings["terminal_command"] = "gnome-terminal";
-        config.global_settings["browser_command"] = "xdg-open";
-        config.global_settings["enable_notifications"] = "true";
+        config.global_settings[Constants::SETTING_TERMINAL_COMMAND] = Constants::DEFAULT_TERMINAL_COMMAND;
+        config.global_settings[Constants::SETTING_BROWSER_COMMAND] = Constants::DEFAULT_BROWSER_COMMAND;
+        config.global_settings[Constants::SETTING_ENABLE_NOTIFICATIONS] = "true";
         return;
     }
     
@@ -441,25 +445,25 @@ void ConfigLoader::parseGlobalSettings(const std::string& content, Config& confi
     std::string settings_content = content.substr(object_start, object_end - object_start + 1);
     
     // Extract known settings
-    std::string terminal_cmd = extractStringValue(settings_content, "terminal_command");
+    std::string terminal_cmd = extractStringValue(settings_content, Constants::SETTING_TERMINAL_COMMAND);
     if (!terminal_cmd.empty()) {
-        config.global_settings["terminal_command"] = terminal_cmd;
+        config.global_settings[Constants::SETTING_TERMINAL_COMMAND] = terminal_cmd;
     } else {
-        config.global_settings["terminal_command"] = "gnome-terminal";
+        config.global_settings[Constants::SETTING_TERMINAL_COMMAND] = Constants::DEFAULT_TERMINAL_COMMAND;
     }
     
-    std::string browser_cmd = extractStringValue(settings_content, "browser_command");
+    std::string browser_cmd = extractStringValue(settings_content, Constants::SETTING_BROWSER_COMMAND);
     if (!browser_cmd.empty()) {
-        config.global_settings["browser_command"] = browser_cmd;
+        config.global_settings[Constants::SETTING_BROWSER_COMMAND] = browser_cmd;
     } else {
-        config.global_settings["browser_command"] = "xdg-open";
+        config.global_settings[Constants::SETTING_BROWSER_COMMAND] = Constants::DEFAULT_BROWSER_COMMAND;
     }
     
-    std::string notifications = extractStringValue(settings_content, "enable_notifications");
+    std::string notifications = extractStringValue(settings_content, Constants::SETTING_ENABLE_NOTIFICATIONS);
     if (!notifications.empty()) {
-        config.global_settings["enable_notifications"] = notifications;
+        config.global_settings[Constants::SETTING_ENABLE_NOTIFICATIONS] = notifications;
     } else {
-        config.global_settings["enable_notifications"] = "true";
+        config.global_settings[Constants::SETTING_ENABLE_NOTIFICATIONS] = "true";
     }
 }
 
