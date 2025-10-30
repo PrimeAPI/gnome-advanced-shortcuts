@@ -1,0 +1,13 @@
+Source: primecuts
+Section: gnome
+Priority: optional
+Maintainer: Your Name <you@example.com>
+Build-Depends: debhelper (>= 13), meson, libglib2.0-dev, libgtkmm-3.0-dev
+Standards-Version: 4.5.1
+Homepage: https://github.com/your-repo/primecuts
+
+Package: primecuts
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: A modular GNOME Shell search provider.
+ PrimeCuts is a configurable GNOME Shell search provider that allows you to quickly execute commands, open URLs, and perform various actions directly from the GNOME Shell search interface.
