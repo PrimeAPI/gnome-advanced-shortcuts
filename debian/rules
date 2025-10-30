@@ -1,0 +1,14 @@
+#!/usr/bin/make -f
+export DH_VERBOSE=1
+
+%:
+	dh $@ --with meson
+
+override_dh_auto_build:
+	dh_auto_build -- -Dbuildtype=release
+
+override_dh_auto_test:
+	# No tests to run
+
+override_dh_auto_install:
+	dh_auto_install

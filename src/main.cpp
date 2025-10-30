@@ -2,6 +2,7 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <glib.h>
 
 #include "config.hpp"
 #include "config_loader.hpp"
@@ -50,24 +51,26 @@ bool parseCommandLineArgs(int argc, char* argv[]) {
 
 bool initializeConfiguration() {
     PrimeCuts::ConfigLoader loader;
+    std::string config_path = g_get_user_config_dir();
+    config_path += "/primecuts/config.json";
     
     // Try to load configuration, create default if not found
-    if (!loader.loadConfig("", app_config)) {
-        LOG_ERROR("Failed to load configuration");
+    if (!loader.loadFromFile(config_path, app_config)) {
+        PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::ERROR, "Failed to load configuration");
         return false;
     }
     
     // Initialize command manager with the loaded config
     command_manager = std::make_unique<PrimeCuts::CommandManager>(app_config);
     
-    LOG_DEBUG("Configuration loaded successfully with " + std::to_string(app_config.groups.size()) + " groups");
+    PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::DEBUG, "Configuration loaded successfully with " + std::to_string(app_config.groups.size()) + " groups");
     
     // Print loaded actions for debugging
     if (PrimeCuts::Logger::getInstance().isDebugEnabled()) {
         for (const auto& group : app_config.groups) {
-            LOG_DEBUG("Group: " + group.name + " (" + std::to_string(group.actions.size()) + " actions)");
+            PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::DEBUG, "Group: " + group.name + " (" + std::to_string(group.actions.size()) + " actions)");
             for (const auto& action : group.actions) {
-                LOG_DEBUG("  - " + action.name + " [" + action.id + "]");
+                PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::DEBUG, "  - " + action.name + " [" + action.id + "]");
             }
         }
     }
@@ -78,8 +81,8 @@ bool initializeConfiguration() {
 std::vector<std::string> extractSearchTerms(GVariant* parameters, const std::string& method_name) {
     std::vector<std::string> search_terms;
     
-    LOG_DEBUG("Processing " + method_name + " request...");
-    LOG_DEBUG("Parameters type: " + std::string(g_variant_get_type_string(parameters)));
+    PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::DEBUG, "Processing " + method_name + " request...");
+    PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::DEBUG, "Parameters type: " + std::string(g_variant_get_type_string(parameters)));
     
     GVariantIter iter;
     g_variant_iter_init(&iter, parameters);
@@ -88,7 +91,7 @@ std::vector<std::string> extractSearchTerms(GVariant* parameters, const std::str
     if (method_name == PrimeCuts::Constants::METHOD_GET_SUBSEARCH_RESULT_SET) {
         GVariant* previous_results = g_variant_iter_next_value(&iter);
         if (previous_results) {
-            LOG_DEBUG("Previous results count: " + std::to_string(g_variant_n_children(previous_results)));
+            PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::DEBUG, "Previous results count: " + std::to_string(g_variant_n_children(previous_results)));
             g_variant_unref(previous_results);
         }
     }
@@ -97,7 +100,7 @@ std::vector<std::string> extractSearchTerms(GVariant* parameters, const std::str
     GVariant* terms_array = g_variant_iter_next_value(&iter);
     
     if (terms_array) {
-        LOG_DEBUG("Terms array size: " + std::to_string(g_variant_n_children(terms_array)));
+        PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::DEBUG, "Terms array size: " + std::to_string(g_variant_n_children(terms_array)));
         
         GVariantIter terms_iter;
         g_variant_iter_init(&terms_iter, terms_array);
@@ -105,14 +108,14 @@ std::vector<std::string> extractSearchTerms(GVariant* parameters, const std::str
         gchar* term;
         while (g_variant_iter_next(&terms_iter, "s", &term)) {
             std::string termStr(term);
-            LOG_DEBUG("Search term: '" + termStr + "' (length: " + std::to_string(termStr.length()) + ")");
+            PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::DEBUG, "Search term: '" + termStr + "' (length: " + std::to_string(termStr.length()) + ")");
             search_terms.push_back(termStr);
             g_free(term);
         }
         g_variant_unref(terms_array);
     }
     
-    LOG_DEBUG("Total search terms extracted: " + std::to_string(search_terms.size()));
+    PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::DEBUG, "Total search terms extracted: " + std::to_string(search_terms.size()));
     return search_terms;
 }
 
@@ -122,21 +125,21 @@ void handleSearchRequest(GDBusMethodInvocation* invocation, GVariant* parameters
     // Use command manager to search for matching actions
     std::vector<std::string> matches = command_manager->searchActions(search_terms);
     
-    LOG_DEBUG("Search completed. Found " + std::to_string(matches.size()) + " matching actions");
+    PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::DEBUG, "Search completed. Found " + std::to_string(matches.size()) + " matching actions");
 
     GVariantBuilder builder;
     g_variant_builder_init(&builder, G_VARIANT_TYPE("as"));
     for (const auto& id : matches) {
         g_variant_builder_add(&builder, "s", id.c_str());
-        LOG_DEBUG("Found match: " + id);
+        PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::DEBUG, "Found match: " + id);
     }
 
-    LOG_DEBUG("Returning " + std::to_string(matches.size()) + " results");
+    PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::DEBUG, "Returning " + std::to_string(matches.size()) + " results");
     g_dbus_method_invocation_return_value(invocation, g_variant_new("(as)", &builder));
 }
 
 void handleGetResultMetas(GDBusMethodInvocation* invocation, GVariant* parameters) {
-    LOG_DEBUG("Processing GetResultMetas request...");
+    PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::DEBUG, "Processing GetResultMetas request...");
     
     GVariantIter iter;
     g_variant_iter_init(&iter, parameters);
@@ -151,7 +154,7 @@ void handleGetResultMetas(GDBusMethodInvocation* invocation, GVariant* parameter
         
         gchar* id;
         while (g_variant_iter_next(&ids_iter, "s", &id)) {
-            LOG_DEBUG("Getting meta for ID: " + std::string(id));
+            PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::DEBUG, "Getting meta for ID: " + std::string(id));
             const PrimeCuts::Action* action = command_manager->getAction(id);
             if (action) {
                 GVariantBuilder meta;
@@ -163,7 +166,7 @@ void handleGetResultMetas(GDBusMethodInvocation* invocation, GVariant* parameter
 
                 g_variant_builder_add(&outer, "a{sv}", &meta);
             } else {
-                LOG_DEBUG("No action found for ID: " + std::string(id));
+                PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::DEBUG, "No action found for ID: " + std::string(id));
             }
             g_free(id);
         }
@@ -174,14 +177,14 @@ void handleGetResultMetas(GDBusMethodInvocation* invocation, GVariant* parameter
 }
 
 void handleActivateResult(GDBusMethodInvocation* invocation, GVariant* parameters) {
-    LOG_DEBUG("Processing ActivateResult request...");
+    PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::DEBUG, "Processing ActivateResult request...");
     
     const gchar* id;
     GVariant* terms_variant;
     guint32 timestamp;
     g_variant_get(parameters, "(&s@asu)", &id, &terms_variant, &timestamp);
 
-    LOG_DEBUG("Activating result with ID: " + std::string(id));
+    PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::DEBUG, "Activating result with ID: " + std::string(id));
     
     // Extract terms for potential use in command execution
     std::vector<std::string> terms;
@@ -199,7 +202,7 @@ void handleActivateResult(GDBusMethodInvocation* invocation, GVariant* parameter
     // Use command manager to execute the action
     bool success = command_manager->executeAction(id, terms);
     if (!success) {
-        LOG_DEBUG("Failed to execute action with ID: " + std::string(id));
+        PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::DEBUG, "Failed to execute action with ID: " + std::string(id));
     }
 
     g_dbus_method_invocation_return_value(invocation, nullptr);
@@ -215,7 +218,7 @@ static void handle_method_call(
     GDBusMethodInvocation* invocation,
     gpointer user_data) 
 {
-    LOG_DEBUG("DBus method called: " + std::string(method_name) + " from " + std::string(sender));
+    PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::DEBUG, "DBus method called: " + std::string(method_name) + " from " + std::string(sender));
     
     if (g_strcmp0(method_name, PrimeCuts::Constants::METHOD_GET_INITIAL_RESULT_SET) == 0 ||
         g_strcmp0(method_name, PrimeCuts::Constants::METHOD_GET_SUBSEARCH_RESULT_SET) == 0) {
@@ -228,7 +231,7 @@ static void handle_method_call(
         handleActivateResult(invocation, parameters);
     }
     else {
-        LOG_DEBUG("Unknown method called: " + std::string(method_name));
+        PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::DEBUG, "Unknown method called: " + std::string(method_name));
         g_dbus_method_invocation_return_value(invocation, nullptr);
     }
 }
@@ -236,7 +239,7 @@ static void handle_method_call(
 static GDBusNodeInfo* introspection_data = nullptr;
 
 static void on_bus_acquired(GDBusConnection* connection, const gchar* name, gpointer user_data) {
-    LOG_DEBUG("Bus acquired: " + std::string(name));
+    PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::DEBUG, "Bus acquired: " + std::string(name));
     GDBusInterfaceVTable vtable = { handle_method_call, NULL, NULL };
     GError* error = NULL;
     guint registration_id = g_dbus_connection_register_object(
@@ -247,25 +250,25 @@ static void on_bus_acquired(GDBusConnection* connection, const gchar* name, gpoi
         NULL, NULL, &error);
     
     if (registration_id > 0) {
-        LOG_DEBUG("Object registered successfully with ID: " + std::to_string(registration_id));
+        PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::DEBUG, "Object registered successfully with ID: " + std::to_string(registration_id));
     } else {
-        LOG_ERROR("Failed to register object: " + std::string(error ? error->message : "Unknown error"));
+        PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::ERROR, "Failed to register object: " + std::string(error ? error->message : "Unknown error"));
         if (error) g_error_free(error);
     }
 }
 
 static void on_name_acquired(GDBusConnection* connection, const gchar* name, gpointer user_data) {
-    LOG_DEBUG("Name acquired successfully: " + std::string(name));
-    LOG_INFO("GNOME Shell search provider registered successfully!");
+    PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::DEBUG, "Name acquired successfully: " + std::string(name));
+    PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::INFO, "GNOME Shell search provider registered successfully!");
 }
 
 static void on_name_lost(GDBusConnection* connection, const gchar* name, gpointer user_data) {
-    LOG_DEBUG("Name lost: " + std::string(name));
+    PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::DEBUG, "Name lost: " + std::string(name));
     if (connection == nullptr) {
-        LOG_ERROR("Failed to connect to DBus session bus");
+        PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::ERROR, "Failed to connect to DBus session bus");
     } else {
-        LOG_WARNING("Lost bus name - another service may have taken over, or GNOME Shell couldn't validate the search provider");
-        LOG_WARNING("Check that the search provider configuration is correctly installed.");
+        PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::WARNING, "Lost bus name - another service may have taken over, or GNOME Shell couldn't validate the search provider");
+        PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::WARNING, "Check that the search provider configuration is correctly installed.");
     }
 }
 
@@ -275,11 +278,11 @@ int main(int argc, char* argv[]) {
     // Parse command line arguments
     bool debug_mode = parseCommandLineArgs(argc, argv);
     
-    LOG_DEBUG("Starting PrimeCuts DBus service...");
+    PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::DEBUG, "Starting PrimeCuts DBus service...");
     
     // Initialize configuration before starting DBus service
     if (!initializeConfiguration()) {
-        LOG_ERROR("Failed to initialize configuration. Exiting.");
+        PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::ERROR, "Failed to initialize configuration. Exiting.");
         return 1;
     }
     
@@ -287,12 +290,12 @@ int main(int argc, char* argv[]) {
     introspection_data = g_dbus_node_info_new_for_xml(introspection_xml, NULL);
     
     if (!introspection_data) {
-        LOG_ERROR("Failed to parse introspection XML!");
+        PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::ERROR, "Failed to parse introspection XML!");
         return 1;
     }
-    LOG_DEBUG("Introspection data loaded successfully");
+    PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::DEBUG, "Introspection data loaded successfully");
 
-    LOG_DEBUG("Attempting to own bus name: " + std::string(PrimeCuts::Constants::DBUS_SERVICE_NAME));
+    PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::DEBUG, "Attempting to own bus name: " + std::string(PrimeCuts::Constants::DBUS_SERVICE_NAME));
     guint owner_id = g_bus_own_name(
         G_BUS_TYPE_SESSION,
         PrimeCuts::Constants::DBUS_SERVICE_NAME,
@@ -303,10 +306,10 @@ int main(int argc, char* argv[]) {
         NULL, NULL);
 
     if (debug_mode) {
-        LOG_INFO("PrimeCuts DBus service running in debug mode...");
-        LOG_INFO("Configuration loaded with " + std::to_string(app_config.groups.size()) + " action groups.");
+        PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::INFO, "PrimeCuts DBus service running in debug mode...");
+        PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::INFO, "Configuration loaded with " + std::to_string(app_config.groups.size()) + " action groups.");
     } else {
-        LOG_INFO("PrimeCuts DBus service running...");
+        PrimeCuts::Logger::getInstance().log(PrimeCuts::LogLevel::INFO, "PrimeCuts DBus service running...");
     }
     
     g_main_loop_run(loop);
